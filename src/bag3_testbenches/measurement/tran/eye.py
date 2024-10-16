@@ -121,6 +121,9 @@ class EyeAnalysis:
             if (sig_li(np.array([_t0])) - val_mid) * (sig_li(np.array([_t1])) - val_mid) < 0:
                 # this is the first transition
                 break
+            if _t1 + self._t_per > time[-1]:
+                # Last transition
+                break
             _t0 = _t1
 
         # Find exact zero crossing between _t0 and _t1.

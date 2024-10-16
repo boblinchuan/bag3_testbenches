@@ -118,11 +118,14 @@ class DigitalTranTB(TranTB):
         specs = self.specs
         pulse_list: Sequence[Mapping[str, Any]] = specs.get('pulse_list', [])
         reset_list: Sequence[Tuple[str, bool]] = specs.get('reset_list', [])
+        in_file_list: Optional[List[Tuple[str, str]]] = sch_params.get('in_file_list', None)
 
         src_list = ans['src_list']
         src_pins = set()
         self.get_pulse_sources(pulse_list, src_list, src_pins)
         self.get_reset_sources(reset_list, src_list, src_pins, skip_src=True)
+
+        ans['in_file_list'] = in_file_list
 
         return ans
 
@@ -244,7 +247,11 @@ class DigitalTranTB(TranTB):
 
     def calc_delay(self, data: SimData, in_name: str, out_name: str, in_edge: EdgeType,
                    out_edge: EdgeType, t_start: Union[np.ndarray, float, str] = 0,
-                   t_stop: Union[np.ndarray, float, str] = float('inf')) -> np.ndarray:
+                   t_stop: Union[np.ndarray, float, str] = float('inf'),
+                   pos_only: bool = False) -> np.ndarray:
+        """Compute time difference between first input edge and first output edge, with 
+        then given time segment. Use pos_only to force positive delays (force output
+        edge to be after input edge)."""
         thres_delay = 0.5
 
         specs = self.specs
@@ -270,14 +277,23 @@ class DigitalTranTB(TranTB):
         vth_out = (out_1 - out_0) * thres_delay + out_0
         in_c = get_first_crossings(tvec, in_vec, vth_in, etype=in_edge, start=t_start, stop=t_stop,
                                    rtol=rtol, atol=atol)
-        out_c = get_first_crossings(tvec, out_vec, vth_out, etype=out_edge, start=t_start,
-                                    stop=t_stop, rtol=rtol, atol=atol)
+        if pos_only:
+            out_c = get_first_crossings(tvec, out_vec, vth_out, etype=out_edge, start=in_c,
+                                        stop=t_stop, rtol=rtol, atol=atol)
+        else:
+            out_c = get_first_crossings(tvec, out_vec, vth_out, etype=out_edge, start=t_start,
+                                        stop=t_stop, rtol=rtol, atol=atol)
         out_c -= in_c
         return out_c
 
     def calc_trf(self, data: SimData, out_name: str, out_rise: bool, allow_inf: bool = False,
                  t_start: Union[np.ndarray, float, str] = 0,
-                 t_stop: Union[np.ndarray, float, str] = float('inf')) -> np.ndarray:
+                 t_stop: Union[np.ndarray, float, str] = float('inf'),
+                 pos_only: bool = False) -> np.ndarray:
+        """Compute transition time of the first crossing (rising or falling) of a signal
+        within the given time segment using the lo and hi threshold of this TBM (thres_lo, 
+        thres_hi). Use pos_only to force positive times (force output edge to be after the
+        input edge)."""
         specs = self.specs
         logger = self.logger
         rtol: float = specs.get('rtol', 1e-8)
@@ -303,14 +319,22 @@ class DigitalTranTB(TranTB):
             edge = EdgeType.RISE
             t0 = get_first_crossings(tvec, yvec, vth_0, etype=edge, start=t_start, stop=t_stop,
                                      rtol=rtol, atol=atol)
-            t1 = get_first_crossings(tvec, yvec, vth_1, etype=edge, start=t_start, stop=t_stop,
-                                     rtol=rtol, atol=atol)
+            if pos_only:
+                t1 = get_first_crossings(tvec, yvec, vth_1, etype=edge, start=t0, stop=t_stop,
+                                        rtol=rtol, atol=atol)
+            else:
+                t1 = get_first_crossings(tvec, yvec, vth_1, etype=edge, start=t_start, stop=t_stop,
+                                        rtol=rtol, atol=atol)
         else:
             edge = EdgeType.FALL
             t0 = get_first_crossings(tvec, yvec, vth_1, etype=edge, start=t_start, stop=t_stop,
                                      rtol=rtol, atol=atol)
-            t1 = get_first_crossings(tvec, yvec, vth_0, etype=edge, start=t_start, stop=t_stop,
-                                     rtol=rtol, atol=atol)
+            if pos_only:
+                t1 = get_first_crossings(tvec, yvec, vth_0, etype=edge, start=t0, stop=t_stop,
+                                        rtol=rtol, atol=atol)
+            else:
+                t1 = get_first_crossings(tvec, yvec, vth_0, etype=edge, start=t_start, stop=t_stop,
+                                        rtol=rtol, atol=atol)
 
         has_nan = np.isnan(t0).any() or np.isnan(t1).any()
         has_inf = np.isinf(t0).any() or np.isinf(t1).any()

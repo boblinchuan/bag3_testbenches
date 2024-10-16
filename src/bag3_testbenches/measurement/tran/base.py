@@ -48,6 +48,8 @@ class TranTB(GenericTB):
         specs = self.specs
         t_step: Optional[float] = specs.get('t_step', None)
         tran_options: Mapping[str, Any] = specs.get('tran_options', {})
+        sweep_var: str = specs.get('sweep_var', None)
+        sweep_options: Mapping[str, Any] = specs.get('sweep_options', None)
 
         tran_dict = dict(type='TRAN',
                          start=specs.get('t_start', 0.0),
@@ -55,6 +57,9 @@ class TranTB(GenericTB):
                          options=tran_options,
                          save_outputs=self.save_outputs,
                          )
+        if sweep_var and sweep_options:
+            tran_dict['sweep_var'] = sweep_var
+            tran_dict['sweep_options'] = sweep_options
         if t_step is not None:
             tran_dict['strobe'] = t_step
 
